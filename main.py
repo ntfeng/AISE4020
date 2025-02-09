@@ -46,7 +46,8 @@ class Simulation:
         # Instantiate objects
         self.user_obj = user.User((self.WIDTH // 2, self.HEIGHT // 2), self.USER_SPEED)
         self.lidar = sensor_sim.LiDAR_Sensor(self.user_obj, self.LiDAR_RANGE, self.LiDAR_FOV, 4500)
-        self.obj_list = [Rect((0, 0),(100,100))]
+        self.obj_list = [Rect((0, 0),(100,100)),
+                         Rect((-100, 150),(50,100))]
         self.cam = Camera(self.user_obj, (self.WIDTH, self.HEIGHT))
     
     def run(self):
