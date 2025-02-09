@@ -10,14 +10,13 @@ class LiDAR_Sensor:
         self.fov = fov # field of vision (360 for a LiDAR)
         self.lidar_pts = []
     
-    def simulate(self, objs):
+    def simulate(self, num_rays, objs):
 
         new_lidar_pts = []
-        num_rays = 360
 
         for sect in range(num_rays):
             
-            angle = math.radians(sect * (self.fov / 180.0) * math.pi - self.fov / 2.0) # Divides the FOV into sections ranging from -fov/2 to fov/2
+            angle = math.radians(sect * (self.fov / 180.0) * math.pi - self.fov / 2.0) # Divides the FOV into sections 
             closest_intersect = None # Keep track of the closest intersection
             closest_pt = None # Keep track of the actual point of intersection
 

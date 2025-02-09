@@ -40,7 +40,7 @@ class Simulation:
         self.USER_SPEED = 10
         self.USER_RADIUS = 20
         # LiDAR Specs
-        self.LiDAR_RANGE = 150
+        self.LiDAR_RANGE = 200 # Measured in pixels
         self.LiDAR_FOV = 360
 
         # Instantiate objects
@@ -58,7 +58,7 @@ class Simulation:
                     self.running = False
 
             # Simulate Lidar and adjust speed based on proximity to any object
-            lidar_pts = self.lidar.simulate(self.obj_list)
+            lidar_pts = self.lidar.simulate(180, self.obj_list)
         
             # Get user input to adjust location
             self.user_obj.input_handler()
