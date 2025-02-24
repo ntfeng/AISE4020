@@ -68,13 +68,15 @@ class User:
                 self.movement[2] = 0
                 self.movement[3] = 0
 
-    def update(self):
-
+    def update(self, slowdown=None):
+        
+        if slowdown is None:
+            slowdown = {'left': 1, 'right': 1, 'up': 1, 'down': 1}
         if self.movement[0]:  # Move left
-            self.pos = (self.pos[0] - self.speed, self.pos[1])
+            self.pos = (self.pos[0] - self.speed * slowdown['left'], self.pos[1])
         if self.movement[1]:  # Move right
-            self.pos = (self.pos[0] + self.speed, self.pos[1])
+            self.pos = (self.pos[0] + self.speed * slowdown['right'], self.pos[1])
         if self.movement[2]:  # Move up
-            self.pos = (self.pos[0], self.pos[1] - self.speed)
+            self.pos = (self.pos[0], self.pos[1] - self.speed * slowdown['up'])
         if self.movement[3]:  # Move down
-            self.pos = (self.pos[0], self.pos[1] + self.speed)
+            self.pos = (self.pos[0], self.pos[1] + self.speed * slowdown['down'])

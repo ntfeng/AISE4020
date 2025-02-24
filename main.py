@@ -50,7 +50,46 @@ class Simulation:
                          Rect((-100, 150),(50,100))]
         self.cam = Camera(self.user_obj, (self.WIDTH, self.HEIGHT))
     
+    def compute_slowdown(self, lidar_pts, user_pos, lidar_range, factor=0.05, cone_angle=30):
+
+        # Initialize slowdown sums for each direction
+        slowdown_sum = {"left": 0.0, "right": 0.0, "up": 0.0, "down": 0.0}
+
+        for pt in lidar_pts:
+
+            diff_x = pt[0] - user_pos[0]
+            diff_y = pt[1] - user_pos[1]
+            dist = math.hypot(diff_x, diff_y) # Hypotenuse
+            if dist == 0 or dist > lidar_range:
+                continue
+
+            # Weight is stronger when closer
+            weight = (lidar_range - dist) / lidar_range
+            angle = math.degrees(math.atan2(diff_y, diff_x)) % 360 # Return range from -pi to pi radians
+
+            # Check if the point is within the cone for each direction.
+            # Right: around 0/360 degrees
+            if angle <= cone_angle or angle >= 360 - cone_angle:
+                slowdown_sum["right"] += weight
+            # Left: around 180 degrees
+            if abs(angle - 180) <= cone_angle:
+                slowdown_sum["left"] += weight
+            # Up: obstacles above give an angle around 270 degrees
+            if abs(angle - 270) <= cone_angle:
+                slowdown_sum["up"] += weight
+            # Down: obstacles below give an angle around 90 degrees
+            if abs(angle - 90) <= cone_angle:
+                slowdown_sum["down"] += weight
+
+        # Calculate slowdown multiplier
+        slowdown = {}
+        for d in slowdown_sum:
+            slowdown[d] = max(0.1, 1 - factor * slowdown_sum[d])
+
+        return slowdown
+    
     def run(self):
+        
         while self.running:
             self.screen.fill((0, 0, 0)) # Clear Screen
 
@@ -60,10 +99,13 @@ class Simulation:
 
             # Simulate Lidar and adjust speed based on proximity to any object
             lidar_pts = self.lidar.simulate(180, self.obj_list)
+
+            # Compute slowdown multipliers based on LiDAR detections
+            slowdown_dict = self.compute_slowdown(lidar_pts, self.user_obj.pos, self.LiDAR_RANGE)
         
             # Get user input to adjust location
             self.user_obj.input_handler()
-            self.user_obj.update()
+            self.user_obj.update(slowdown=slowdown_dict)
 
             # Camera to 'correct' positioning of render
             self.cam.update()
