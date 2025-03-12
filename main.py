@@ -1,10 +1,10 @@
 # Imports
 import pygame
 import math
-
 import user 
 from obstacle import Obst_Rect as Rect
 import sensor_sim
+import map_processor
 
 # Window rendering
 class Camera:
@@ -20,7 +20,7 @@ class Camera:
 
 class Simulation:
 
-    def __init__(self):
+    def __init__(self, map_path):
         # Pygame setup
         pygame.init()
         pygame.display.set_caption('LiDAR Simulation')
@@ -46,8 +46,7 @@ class Simulation:
         # Instantiate objects
         self.user_obj = user.User((self.WIDTH // 2, self.HEIGHT // 2), self.USER_SPEED)
         self.lidar = sensor_sim.LiDAR_Sensor(self.user_obj, self.LiDAR_RANGE, self.LiDAR_FOV, 4500)
-        self.obj_list = [Rect((0, 0),(100,100)),
-                         Rect((-100, 150),(50,100))]
+        self.obj_list = map_processor.load_map(map_path)
         self.cam = Camera(self.user_obj, (self.WIDTH, self.HEIGHT))
     
     def compute_slowdown(self, lidar_pts, user_pos, lidar_range, factor=0.05, cone_angle=30):
@@ -89,7 +88,8 @@ class Simulation:
         return slowdown
     
     def run(self):
-        
+
+
         while self.running:
             self.screen.fill((0, 0, 0)) # Clear Screen
 
@@ -127,6 +127,6 @@ class Simulation:
 
 if __name__ == "__main__":
 
-    Simulation().run()
+    Simulation('floorplan2.png').run()
 
     pygame.quit()
