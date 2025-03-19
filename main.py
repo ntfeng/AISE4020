@@ -45,8 +45,8 @@ class Simulation:
         self.LiDAR_FOV = 360
 
         # Instantiate objects
-        self.obj_list = [Rect((0, 0), (100, 100)),
-                         Rect((-100, 150), (50, 100)),
+        self.obj_list = [Rect((0, -250), (200, 400)),
+                         Rect((-100, -200), (50, 500)),
                          Rect((-150, 100), (50, 100)),
                          Rect((-150, 250), (400, 30))]
 
