@@ -59,7 +59,7 @@ class Simulation:
         self.pathfinder = pf()
 
         # Button Variables
-        button_w = 150
+        button_w = 180
         button_h = 40
         gap = 10
         start_x = self.WIDTH - (button_w * 3 + gap * 2) - 20
@@ -69,7 +69,7 @@ class Simulation:
         self.buttons = [
             {"name": "No Assistance", "strength": 0, "shape": pygame.Rect(start_x, start_y, button_w, button_h), "color": (0, 128, 0)},
             {"name": "Some Assistance", "strength": 3, "shape": pygame.Rect(start_x + (button_w + gap), start_y, button_w, button_h), "color": (255, 165, 0)},
-            {"name": "Full Assistance", "strength": 6, "shape": pygame.Rect(start_x + 2*(button_w + gap), start_y, button_w, button_h), "color": (255, 0, 0)}
+            {"name": "Stronger Assistance", "strength": 6, "shape": pygame.Rect(start_x + 2*(button_w + gap), start_y, button_w, button_h), "color": (255, 0, 0)}
         ]
 
         # Default to control setting ("Some Assistance")
@@ -137,6 +137,45 @@ class Simulation:
 
         return slowdown
 
+    def compute_steering_nudge(self, nudge_str):
+
+        if not self.curve_pts:
+            return (0, 0)
+
+        guiding_idx = min(5, len(self.curve_pts) - 1)
+        guiding_pt = self.curve_pts[guiding_idx]
+        guiding_vector = (guiding_pt[0] - self.user_obj.pos[0], guiding_pt[1] - self.user_obj.pos[1])
+
+        # Normalize vector
+        guiding_mag = math.hypot(guiding_vector[0], guiding_vector[1])
+        if guiding_mag != 0:
+            guiding_vector = (guiding_vector[0] / guiding_mag, guiding_vector[1] / guiding_mag)
+        else:
+            guiding_vector = (0, 0)
+        
+        # Get user direction vector
+        user_movement = self.user_obj.movement
+        dx = (1 if user_movement[1] else 0) - (1 if user_movement[0] else 0)
+        dy = (1 if user_movement[3] else 0) - (1 if user_movement[2] else 0)
+        user_dir = (0, 0)
+        user_dir_mag = math.hypot(dx, dy)
+        if user_dir_mag > 0:
+            user_dir = (dx / user_dir_mag, dy / user_dir_mag)
+        else:
+            user_dir = (0, 0)
+        
+        # Decompose vector into parallel and perpendicular components
+        # Assuming vector denoted as v and u is unit vector
+        # v = parallel - perpendicular
+        # Parallel (v dot u)u; Perpendicular u(p x u)
+        dot_prod = guiding_vector[0] * user_dir[0] + guiding_vector[1] * user_dir[1]
+        parallel_vector = (dot_prod * user_dir[0], dot_prod * user_dir[1])
+        perp_vector = (guiding_vector[0] - parallel_vector[0], guiding_vector[1] - parallel_vector[1])
+
+        return (perp_vector[0] * nudge_str, perp_vector[1] * nudge_str)
+        
+
+
     def pathfinder_logic(self):
 
         # Clear old curve
@@ -190,20 +229,11 @@ class Simulation:
         if any(self.user_obj.movement):
             scaling_factor = (self.LiDAR_RANGE - min_distance) / self.LiDAR_RANGE
             nudge_strength = self.control_strength * scaling_factor
-
-            guiding_idx = min(5, len(self.curve_pts) - 1)
-            guiding_point = self.curve_pts[guiding_idx]
-            guiding_vector = (guiding_point[0] - self.user_obj.pos[0], guiding_point[1] - self.user_obj.pos[1])
-
-            # Normalize vector
-            guiding_mag = math.hypot(guiding_vector[0], guiding_vector[1])
-            if guiding_mag != 0:
-                guiding_vector = (guiding_vector[0] / guiding_mag, guiding_vector[1] / guiding_mag)
-            else:
-                guiding_vector = (0, 0)
+            steering_nudge = self.compute_steering_nudge(nudge_strength)
+            
                 
             # Perform nudging
-            self.user_obj.pos = (self.user_obj.pos[0] + nudge_strength * guiding_vector[0], self.user_obj.pos[1] + nudge_strength * guiding_vector[1])
+            self.user_obj.pos = (self.user_obj.pos[0] + steering_nudge[0], self.user_obj.pos[1] + steering_nudge[1])
         
         return lidar_pts
 
