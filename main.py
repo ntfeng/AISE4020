@@ -34,6 +34,7 @@ class Simulation:
         self.running = True
 
         # Variables
+        self.font = pygame.font.SysFont(None, 24)
         # Colors
         self.RED = (255,0,0)
         self.WHITE = (255,255,255)
@@ -43,6 +44,8 @@ class Simulation:
         # LiDAR Specs
         self.LiDAR_RANGE = 200 # Measured in pixels
         self.LiDAR_FOV = 360
+        # Pathing
+        self.curve_pts = []
 
         # Instantiate objects
         self.obj_list = [Rect((0, -250), (200, 400)),
@@ -55,8 +58,47 @@ class Simulation:
         self.cam = Camera(self.user_obj, (self.WIDTH, self.HEIGHT))
         self.pathfinder = pf()
 
-        self.control_strength = 3.0
+        # Button Variables
+        button_w = 150
+        button_h = 40
+        gap = 10
+        start_x = self.WIDTH - (button_w * 3 + gap * 2) - 20
+        start_y = self.HEIGHT - button_h - 20
+
+        # List of buttons along with respective attributes
+        self.buttons = [
+            {"name": "No Assistance", "strength": 0, "shape": pygame.Rect(start_x, start_y, button_w, button_h), "color": (0, 128, 0)},
+            {"name": "Some Assistance", "strength": 3, "shape": pygame.Rect(start_x + (button_w + gap), start_y, button_w, button_h), "color": (255, 165, 0)},
+            {"name": "Full Assistance", "strength": 6, "shape": pygame.Rect(start_x + 2*(button_w + gap), start_y, button_w, button_h), "color": (255, 0, 0)}
+        ]
+
+        # Default to control setting ("Some Assistance")
+        self.ctrl_index = 1
+        self.control_strength = self.buttons[self.ctrl_index]["strength"]
     
+    def butt_event_handler(self, event):
+
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            for i, btn in enumerate(self.buttons):
+                if btn["shape"].collidepoint(event.pos):
+                    self.ctrl_index = i
+                    self.control_strength = btn["strength"]
+                    break
+    
+    def render_butts(self):
+
+        for i, btn in enumerate(self.buttons):
+            pygame.draw.rect(self.screen, btn["color"], btn["shape"])
+
+            # Draw outline for selected button
+            if i == self.ctrl_index:
+                pygame.draw.rect(self.screen, (255, 255, 255), btn["shape"], width=3)
+
+            # Render label in black
+            text_surf = self.font.render(btn["name"], True, (0, 0, 0))
+            text_rect = text_surf.get_rect(center=btn["shape"].center)
+            self.screen.blit(text_surf, text_rect)
+
     def compute_slowdown(self, lidar_pts, user_pos, lidar_range, factor=0.05, cone_angle=30):
 
         # Initialize slowdown sums for each direction
@@ -94,83 +136,97 @@ class Simulation:
             slowdown[d] = max(0.1, 1 - factor * slowdown_sum[d])
 
         return slowdown
-    
+
+    def pathfinder_logic(self):
+
+        # Clear old curve
+        self.curve_pts.clear()
+        lidar_pts = self.lidar.simulate(180, self.obj_list)
+
+        # Speed Policy
+        # Slowdown factors are based on chosen setting. Should scale if option 1 or 2 is chosen
+        if self.control_strength == 0:
+            slowdown_dict = {'left': 1, 'right': 1, 'up': 1, 'down': 1}
+        else:
+            slowdown_dict = self.compute_slowdown(lidar_pts, self.user_obj.pos, self.LiDAR_RANGE)
+        
+        # Update user movement with slowdown
+        self.user_obj.input_handler()
+        self.user_obj.update(slowdown=slowdown_dict)
+
+        # Compute the minimum distance from the user to any obstacle
+        min_distance = self.LiDAR_RANGE
+        for pt in lidar_pts:
+            dist = math.hypot(pt[0] - self.user_obj.pos[0], pt[1] - self.user_obj.pos[1])
+            if dist < min_distance:
+                min_distance = dist
+        
+        # Compute the desired path using the Pathfinder class
+        endpt, repulsion_vector, desired_dir, net_vector, net_direction = self.pathfinder.compute_path(user_pos=self.user_obj.pos, lidar_pts=lidar_pts, lidar_range=self.LiDAR_RANGE, user_movement=self.user_obj.movement)
+
+        # Compute bending intensity based on proximity
+        threshold = 50
+        dynamic_bend_intensity = 0.3 + 0.7 * (max(0, (threshold - min_distance)) / threshold)
+            
+        # Compute the perpendicular vector to the net direction
+        perp_vector = (-net_direction[1], net_direction[0])
+        rep_mag = math.hypot(repulsion_vector[0], repulsion_vector[1])
+        offset_distance = rep_mag * dynamic_bend_intensity
+            
+        # Compute the midpoint between the user's position and the endpoint
+        midpt = ((self.user_obj.pos[0] + endpt[0]) / 2, (self.user_obj.pos[1] + endpt[1]) / 2)
+            
+        # Offset the midpoint along the perpendicular to get the control point
+        control_pt = (midpt[0] + offset_distance * perp_vector[0], midpt[1] + offset_distance * perp_vector[1])
+            
+        # Adjust the control point using curve repulsion
+        repulsion_offset = self.pathfinder.compute_repulsion_control_pt(user_pos=self.user_obj.pos, desired_dir=endpt, lidar_pts=lidar_pts, avoid_thresh=30, repulsion_factor=0.5)
+        control_pt = (control_pt[0] + repulsion_offset[0], control_pt[1] + repulsion_offset[1])
+
+        # Generate the quadratic Bezier curve
+        self.curve_pts = self.pathfinder.compute_quad_bezier_curve(self.user_obj.pos, control_pt, endpt, num_pts=20)
+
+        # Gently nudge the user towards the computed path. Only move them when user is moving
+        if any(self.user_obj.movement):
+            scaling_factor = (self.LiDAR_RANGE - min_distance) / self.LiDAR_RANGE
+            nudge_strength = self.control_strength * scaling_factor
+
+            guiding_idx = min(5, len(self.curve_pts) - 1)
+            guiding_point = self.curve_pts[guiding_idx]
+            guiding_vector = (guiding_point[0] - self.user_obj.pos[0], guiding_point[1] - self.user_obj.pos[1])
+
+            # Normalize vector
+            guiding_mag = math.hypot(guiding_vector[0], guiding_vector[1])
+            if guiding_mag != 0:
+                guiding_vector = (guiding_vector[0] / guiding_mag, guiding_vector[1] / guiding_mag)
+            else:
+                guiding_vector = (0, 0)
+                
+            # Perform nudging
+            self.user_obj.pos = (self.user_obj.pos[0] + nudge_strength * guiding_vector[0], self.user_obj.pos[1] + nudge_strength * guiding_vector[1])
+        
+        return lidar_pts
+
     def run(self):
         
         while self.running:
-            self.screen.fill((0, 0, 0)) # Clear Screen
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                else:
+                    self.butt_event_handler(event)
 
             # Simulate Lidar and adjust speed based on proximity to any object
-            lidar_pts = self.lidar.simulate(180, self.obj_list)
-
-            # Compute slowdown multipliers based on LiDAR detections
-            slowdown_dict = self.compute_slowdown(lidar_pts, self.user_obj.pos, self.LiDAR_RANGE)
-        
-            # Get user input to adjust location
-            self.user_obj.input_handler()
-            self.user_obj.update(slowdown=slowdown_dict)
-            # self.user_obj.update()
-
-            # Compute the minimum distance from the user to any obstacle
-            min_distance = self.LiDAR_RANGE
-            for pt in lidar_pts:
-                dist = math.hypot(pt[0] - self.user_obj.pos[0], pt[1] - self.user_obj.pos[1])
-                if dist < min_distance:
-                    min_distance = dist
-
-            # Compute the desired path using the Pathfinder class
-            endpoint, repulsion_vector, desired_dir, net_vector, net_direction = self.pathfinder.compute_path(user_pos=self.user_obj.pos, lidar_pts=lidar_pts, lidar_range=self.LiDAR_RANGE, user_movement=self.user_obj.movement)
-            
-            # Compute bending intensity based on proximity
-            threshold = 50
-            dynamic_bend_intensity = 0.3 + 0.7 * (max(0, (threshold - min_distance)) / threshold)
-            
-            # Compute the perpendicular vector to the net direction
-            perp_vector = (-net_direction[1], net_direction[0])
-            rep_mag = math.hypot(repulsion_vector[0], repulsion_vector[1])
-            offset_distance = rep_mag * dynamic_bend_intensity
-            
-            # Compute the midpoint between the user's position and the endpoint
-            midpoint = ((self.user_obj.pos[0] + endpoint[0]) / 2,
-                        (self.user_obj.pos[1] + endpoint[1]) / 2)
-            
-            # Offset the midpoint along the perpendicular to get the control point
-            control_point = (midpoint[0] + offset_distance * perp_vector[0], midpoint[1] + offset_distance * perp_vector[1])
-            
-            # Adjust the control point using curve repulsion
-            repulsion_offset = self.pathfinder.compute_repulsion_control_pt(user_pos=self.user_obj.pos, desired_dir=endpoint, lidar_pts=lidar_pts, avoid_thresh=30, repulsion_factor=0.5)
-            control_point = (control_point[0] + repulsion_offset[0], control_point[1] + repulsion_offset[1])
-            
-            # Generate the quadratic Bezier curve
-            curve_pts = self.pathfinder.compute_quad_bezier_curve(self.user_obj.pos, control_point, endpoint, num_pts=20)
-            
-            # Gently nudge the user towards the computed path. Only move them when user is moving
-            if any(self.user_obj.movement):
-                scaling_factor = (self.LiDAR_RANGE - min_distance) / self.LiDAR_RANGE
-                nudge_strength = self.control_strength * scaling_factor
-
-                guiding_idx = min(5, len(curve_pts) - 1)
-                guiding_point = curve_pts[guiding_idx]
-                guiding_vector = (guiding_point[0] - self.user_obj.pos[0], guiding_point[1] - self.user_obj.pos[1])
-
-                # Normalize vector
-                guiding_mag = math.hypot(guiding_vector[0], guiding_vector[1])
-                if guiding_mag != 0:
-                    guiding_vector = (guiding_vector[0] / guiding_mag, guiding_vector[1] / guiding_mag)
-                else:
-                    guiding_vector = (0, 0)
-                
-                # Perform nudging
-                self.user_obj.pos = (self.user_obj.pos[0] + nudge_strength * guiding_vector[0], self.user_obj.pos[1] + nudge_strength * guiding_vector[1])
+            lidar_pts = self.pathfinder_logic()
 
             # Camera to 'correct' positioning of render
             self.cam.update()
 
             # Render
+            self.screen.fill((0, 0, 0)) # Clear Screen
+
+            # Render obstacles
             for obj in self.obj_list:
                 obj.render(self.screen, self.cam.pos, True)
 
@@ -183,9 +239,13 @@ class Simulation:
             pygame.draw.circle(self.screen, self.WHITE, (self.WIDTH // 2, self.HEIGHT // 2), self.USER_RADIUS)
 
             # Render the computed Bezier curve
-            adjusted_curve = [(pt[0] - self.cam.pos[0], pt[1] - self.cam.pos[1]) for pt in curve_pts]
-            for i in range(len(adjusted_curve) - 1):
-                pygame.draw.line(self.screen, (0, 255, 0), adjusted_curve[i], adjusted_curve[i+1], 2)
+            if self.control_strength > 0 and self.curve_pts:
+                adjusted_curve = [(pt[0] - self.cam.pos[0], pt[1] - self.cam.pos[1]) for pt in self.curve_pts]
+                for i in range(len(adjusted_curve) - 1):
+                    pygame.draw.line(self.screen, (0, 255, 0), adjusted_curve[i], adjusted_curve[i + 1], 2)
+
+            # Render control buttons
+            self.render_butts()
 
             pygame.display.update()
             self.clock.tick(60)      
