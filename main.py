@@ -1,11 +1,12 @@
 # Imports
 import pygame
 import math
-
 import user 
 from obstacle import Obst_Rect as Rect
 import sensor_sim
 from pathfinder import Pathfinder as pf
+
+# import map_processor
 
 # Window rendering
 class Camera:
@@ -57,6 +58,8 @@ class Simulation:
         self.lidar = sensor_sim.LiDAR_Sensor(self.user_obj, self.LiDAR_RANGE, self.LiDAR_FOV, 4500)
         self.cam = Camera(self.user_obj, (self.WIDTH, self.HEIGHT))
         self.pathfinder = pf()
+        
+        # self.obj_list = map_processor.load_map(map_path)
 
         # Button Variables
         button_w = 180
@@ -229,8 +232,7 @@ class Simulation:
         if any(self.user_obj.movement):
             scaling_factor = (self.LiDAR_RANGE - min_distance) / self.LiDAR_RANGE
             nudge_strength = self.control_strength * scaling_factor
-            steering_nudge = self.compute_steering_nudge(nudge_strength)
-            
+            steering_nudge = self.compute_steering_nudge(nudge_strength)     
                 
             # Perform nudging
             self.user_obj.pos = (self.user_obj.pos[0] + steering_nudge[0], self.user_obj.pos[1] + steering_nudge[1])
@@ -238,7 +240,8 @@ class Simulation:
         return lidar_pts
 
     def run(self):
-        
+
+
         while self.running:
 
             for event in pygame.event.get():
