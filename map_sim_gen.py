@@ -8,9 +8,11 @@ from shapely.ops import cascaded_union
 
 class Sim_Map_Generator:
 
-    def __init__(self, map, merge_thresh=5, area_thresh=200, thickness=8, screen_width=1280, screen_height=720, close_kernel_size=(5, 5), close_iter=3, h_thresh=40, min_line_len=20, max_line_gap=15):
+    def __init__(self, map, scale=1.0, merge_thresh=5, area_thresh=200, thickness=8, screen_width=1280, screen_height=720, close_kernel_size=(5, 5), close_iter=3, h_thresh=40, min_line_len=20, max_line_gap=15):
         
         self.map = map
+        self.scale = scale
+
         self.merge_thresh = merge_thresh
         self.area_thresh = area_thresh
         self.thickness = thickness
@@ -171,6 +173,16 @@ class Sim_Map_Generator:
 
         return line_segs
     
+    def scale_poly(self, poly, scale=None):
+
+        if scale is None:
+
+            scale = self.scale
+
+        scaled_poly = [(x * scale - self.screen_width * (scale - 1), y * scale - self.screen_height * (scale - 1)) for (x, y) in poly]
+
+        return scaled_poly
+    
     def gen_map_polys(self):
 
         line_segs = self.proc_img(self.map)
@@ -186,12 +198,20 @@ class Sim_Map_Generator:
         merged_polys = self.merge_polys(wall_polys)
         filtered_polys = self.filter_polys(merged_polys)
 
-        return filtered_polys
+
+        if self.scale != 1.0:
+
+            scaled_polys = [self.scale_poly(poly) for poly in filtered_polys]
+            return scaled_polys
+        else:
+
+            return filtered_polys
+        # return filtered_polys
 
 # For testing the class directly:
 if __name__ == '__main__':
 
-    map_gen = Sim_Map_Generator("maps/scan1_livingroom.png")
+    map_gen = Sim_Map_Generator("maps/scan1_livingroom.png", scale=2.0)
     polygons = map_gen.gen_map_polys()
     print("Generated wall polygons:", len(polygons))
 
