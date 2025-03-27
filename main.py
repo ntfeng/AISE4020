@@ -7,6 +7,8 @@ import sensor_sim
 from pathfinder import Pathfinder as pf
 import map_sim_gen as msgen
 
+from shapely.geometry import Polygon
+
 # import map_processor
 
 # Window rendering
@@ -41,7 +43,7 @@ class Simulation:
         self.RED = (255,0,0)
         self.WHITE = (255,255,255)
         # User Settings
-        self.USER_SPEED = 10
+        self.USER_SPEED = 3
         self.USER_RADIUS = 20
         # LiDAR Specs
         self.LiDAR_RANGE = 200 # Measured in pixels
@@ -51,18 +53,24 @@ class Simulation:
 
         # Map generator
         map_generator = msgen.Sim_Map_Generator("maps/scan1_livingroom.png", 3.0)
-        polygon_list = map_generator.gen_map_polys()
+        poly_list = map_generator.gen_map_polys()
 
         # Instantiate objects
-        # self.obj_list = [Rect((0, -250), (200, 400)),
-        #                  Rect((-100, -200), (50, 500)),
-        #                  Rect((-150, 100), (50, 100)),
-        #                  Rect((-150, 250), (400, 30))]
         self.obj_list = []
-        for poly in polygon_list:
 
+        # Tight corner hallway list of polygons
+        # poly_list = [
+        #     [(0, -250), (100, -250), (100, 600), (0, 600)],
+        #     [(200, -250), (300, -250), (300, 550), (200, 550)],
+        #     [(0, 600), (600, 600), (600, 700), (0, 700)],
+        # ]
+
+        poly_list = [Polygon(pts).exterior.coords for pts in poly_list]
+
+        for poly in poly_list:
             obs = Rect((0, 0), (0, 0)) 
             obs.poly = poly 
+            obs.shapely_poly = Polygon(poly)
             self.obj_list.append(obs)
 
         self.user_obj = user.User((self.WIDTH // 2, self.HEIGHT // 2), self.USER_SPEED)
@@ -94,6 +102,7 @@ class Simulation:
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             for i, btn in enumerate(self.buttons):
+
                 if btn["shape"].collidepoint(event.pos):
                     self.ctrl_index = i
                     self.control_strength = btn["strength"]
@@ -103,7 +112,6 @@ class Simulation:
 
         for i, btn in enumerate(self.buttons):
             pygame.draw.rect(self.screen, btn["color"], btn["shape"])
-
             # Draw outline for selected button
             if i == self.ctrl_index:
                 pygame.draw.rect(self.screen, (255, 255, 255), btn["shape"], width=3)
@@ -119,7 +127,6 @@ class Simulation:
         slowdown_sum = {"left": 0.0, "right": 0.0, "up": 0.0, "down": 0.0}
 
         for pt in lidar_pts:
-
             diff_x = pt[0] - user_pos[0]
             diff_y = pt[1] - user_pos[1]
             dist = math.hypot(diff_x, diff_y) # Hypotenuse
@@ -211,6 +218,7 @@ class Simulation:
         min_distance = self.LiDAR_RANGE
         for pt in lidar_pts:
             dist = math.hypot(pt[0] - self.user_obj.pos[0], pt[1] - self.user_obj.pos[1])
+
             if dist < min_distance:
                 min_distance = dist
         
@@ -254,8 +262,8 @@ class Simulation:
 
 
         while self.running:
-
             for event in pygame.event.get():
+
                 if event.type == pygame.QUIT:
                     self.running = False
                 else:
@@ -276,7 +284,6 @@ class Simulation:
             for obj in self.obj_list:
                 # Check if the obstacle has a polygon attribute
                 if hasattr(obj, 'poly'):
-
                     pts = [(int(x) - self.cam.pos[0], int(y) - self.cam.pos[1]) for (x, y) in obj.poly]
                     pygame.draw.polygon(self.screen, (0, 0, 255), pts, width=2)
 

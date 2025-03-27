@@ -57,23 +57,19 @@ class Sim_Map_Generator:
         for poly in poly_list:
 
             if len(poly) >= 3: # Check number of vertices (min 3 for valid polygon)
-
                 polys.append(Polygon(poly).buffer(self.merge_thresh)) # Buffer extends shapes so that close shapes overlap for merging
 
         if not polys:
-
             return []
 
         merged = cascaded_union(polys) # Performs union on the buffered shapes; Merges polygons that overlapping
         merged_polys = []
 
         if merged.geom_type == 'Polygon':
-
             merged_polys.append(list(merged.exterior.coords)) # Keep a list of exterior points
         elif hasattr(merged, 'geoms'): # Check if merge shape is MultiPolygon or GeometryCollection
-
             for geom in merged.geoms:
-
+                
                 try:
                     merged_polys.append(list(geom.exterior.coords))
                 except AttributeError:
@@ -85,16 +81,13 @@ class Sim_Map_Generator:
     def filter_polys(self, poly_coords, area_thresh=None):
 
         if area_thresh is None:
-
             area_thresh = self.area_thresh
 
         filtered_polys = []
         for coords in poly_coords:
-
             poly = Polygon(coords)
 
             if poly.area >= area_thresh:
-
                 filtered_polys.append(coords)
 
         return filtered_polys
@@ -102,7 +95,6 @@ class Sim_Map_Generator:
     def thicken_poly(self, x1, y1, x2, y2, thickness=None):
 
         if thickness is None:
-
             thickness = self.thickness
 
         # Calculate length of "bone"
@@ -111,7 +103,6 @@ class Sim_Map_Generator:
         length = math.hypot(x_diff, y_diff)
 
         if length == 0:
-
             return None
 
         # Compute a perpendicular unit vector to line to determine which direction to thicken polygon
@@ -134,7 +125,6 @@ class Sim_Map_Generator:
         img = cv2.imread(img_path)
 
         if img is None:
-
             print("Warning: Couldn't load image", img_path)
             return []
 
@@ -151,7 +141,6 @@ class Sim_Map_Generator:
         # Fill gaps
         kernel = np.ones(self.close_kernel_size, np.uint8)
         for _ in range(self.close_iter):
-
             proc_img = cv2.morphologyEx(proc_img, cv2.MORPH_CLOSE, kernel) # Closing (Dilation then erosion)
         
         skel_img = self.gen_skeleton(proc_img)
@@ -165,9 +154,7 @@ class Sim_Map_Generator:
         
         line_segs = []
         if lines is not None:
-
             for line in lines:
-
                 x1, y1, x2, y2 = line[0]
                 line_segs.append((x1, y1, x2, y2))
 
@@ -176,10 +163,9 @@ class Sim_Map_Generator:
     def scale_poly(self, poly, scale=None):
 
         if scale is None:
-
             scale = self.scale
 
-        scaled_poly = [(x * scale - self.screen_width * (scale - 1), y * scale - self.screen_height * (scale - 1)) for (x, y) in poly]
+        scaled_poly = [(x * scale - self.screen_width / 2 * (scale - 1), y * scale - self.screen_height / 2 * (scale - 1)) for (x, y) in poly]
 
         return scaled_poly
     
@@ -189,10 +175,9 @@ class Sim_Map_Generator:
 
         wall_polys = []
         for (x1, y1, x2, y2) in line_segs:
-
             poly = self.thicken_poly(x1, y1, x2, y2)
-            if poly is not None:
 
+            if poly is not None:
                 wall_polys.append(poly)
 
         merged_polys = self.merge_polys(wall_polys)
@@ -200,11 +185,9 @@ class Sim_Map_Generator:
 
 
         if self.scale != 1.0:
-
             scaled_polys = [self.scale_poly(poly) for poly in filtered_polys]
             return scaled_polys
         else:
-
             return filtered_polys
         # return filtered_polys
 
@@ -223,16 +206,13 @@ if __name__ == '__main__':
 
     running = True
     while running:
-
         for event in pygame.event.get():
 
             if event.type == pygame.QUIT:
-
                 running = False
 
         screen.fill((0, 0, 0))
         for poly in polygons:
-
             pts = [(int(x), int(y)) for (x, y) in poly]
             pygame.draw.polygon(screen, (0, 0, 255), pts, width=2)
 

@@ -1,54 +1,73 @@
 import math
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, LineString
 
 class LiDAR_Sensor:
 
     def __init__(self, user, range=12, fov=360, speed=4500):
 
-        self.range = range # range measured in metres
-        self.speed = speed # rotations per second
+        self.range = range  # range measured in pixels
+        self.speed = speed  # rotations per second
         self.user = user
-        self.fov = fov # field of vision (360 for a LiDAR)
+        self.fov = fov  # field of vision (360 for a LiDAR)
         self.lidar_pts = []
-    
+
     def simulate(self, num_rays, objs):
 
         new_lidar_pts = []
+        user_coord = self.user.pos
 
         for sect in range(num_rays):
+            # Calculate the ray angles
+            angle = math.radians(sect * (self.fov / num_rays) - (self.fov / 2)) # Divides the FOV into sections
+            # Hcos(ang)=A; Hsin(ang)=O where H is the range of the LiDAR
+            cos_angle = math.cos(angle) # Used for horizontal coordinates
+            sin_angle = math.sin(angle) # Used for vertical coordinates
             
-            angle = math.radians(sect * (self.fov / 180.0) * math.pi - self.fov / 2.0) # Divides the FOV into sections 
-            closest_intersect = None # Keep track of the closest intersection
-            closest_pt = None # Keep track of the actual point of intersection
+            # Construct Shapely line to create ray
+            end_point = (user_coord[0] + self.range * cos_angle, user_coord[1] + self.range * sin_angle)
+            ray_line = LineString([user_coord, end_point])
 
-            # Simulate rays traveling from the LiDAR (check closest distance before further)
-            for dist in range(self.range):
+            closest_distance = self.range 
+            closest_point = None
 
-                ray_sim_coord = (int(self.user.pos[0] + dist * math.cos(angle)), int(self.user.pos[1] + dist * math.sin(angle)))
+            # Iterate through obstacles to compute intersection with the ray
+            for obj in objs:
+                # Want to use any 'stored' Shapely polygons first before having to instantiate one (processing power)
+                poly = obj.shapely_poly if hasattr(obj, 'shapely_poly') else Polygon(obj.poly)
+                inter_poly = poly.intersection(ray_line) # Returns poly shape of intersection
                 
-                # Check for collisions with any object (need positions of objects to simulate LiDAR)
-                for obj in objs:
+                if inter_poly.is_empty:
+                    continue
 
-                    if self.is_object_near(ray_sim_coord, obj):
+                # Intersection geometry handler
+                if inter_poly.geom_type == 'Point': # Handle case of line to line intersection
+                    pt = (inter_poly.x, inter_poly.y)
+                    dist = math.hypot(pt[0] - user_coord[0], pt[1] - user_coord[1])
 
-                        # If an intersection is found, update the closest intersection
-                        if closest_intersect is None or dist < closest_intersect:
+                    if dist < closest_distance:
+                        closest_distance = dist
+                        closest_point = pt
+                elif inter_poly.geom_type in ['MultiPoint', 'GeometryCollection']: # Handle the case of multiple intersections or grazing an edge
+                    for geom in inter_poly.geoms:
 
-                            closest_intersect = dist
-                            closest_pt = ray_sim_coord  # Store the point where we hit the object
-                        break  # Stop checking further once a collision is detected
-            
-            # Add lidar point only if an intersection was found
-            if closest_pt is not None:
+                        if geom.geom_type == 'Point':
+                            pt = (geom.x, geom.y)
+                            dist = math.hypot(pt[0] - user_coord[0], pt[1] - user_coord[1])
 
-                new_lidar_pts.append(closest_pt)
-        
+                            if dist < closest_distance:
+                                closest_distance = dist
+                                closest_point = pt
+                elif inter_poly.geom_type == 'LineString': # Handle the case of overlapping lines
+                    
+                    pt = inter_poly.interpolate(inter_poly.project(Point(self.user.pos)))
+                    dist = math.hypot(pt.x - user_coord[0], pt.y - user_coord[1])
+                    
+                    if dist < closest_distance:
+                        closest_distance = dist
+                        closest_point = (pt.x, pt.y)
+
+            if closest_point is not None:
+                new_lidar_pts.append(closest_point)
+
         self.lidar_pts = new_lidar_pts
         return self.lidar_pts
-    
-    def is_object_near(self, coord, obj):
-
-        # Check if the point (x, y) is within the bounds of the object
-        # return obj.pos[0] <= coord[0] <= obj.pos[0] + obj.dim[0] and obj.pos[1] <= coord[1] <= obj.pos[1] + obj.dim[1]
-        poly = Polygon(obj.poly)
-        return poly.contains(Point(coord))
