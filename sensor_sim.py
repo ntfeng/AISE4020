@@ -1,4 +1,5 @@
 import math
+from shapely.geometry import Point, Polygon
 
 class LiDAR_Sensor:
 
@@ -48,4 +49,6 @@ class LiDAR_Sensor:
     def is_object_near(self, coord, obj):
 
         # Check if the point (x, y) is within the bounds of the object
-        return obj.pos[0] <= coord[0] <= obj.pos[0] + obj.dim[0] and obj.pos[1] <= coord[1] <= obj.pos[1] + obj.dim[1]
+        # return obj.pos[0] <= coord[0] <= obj.pos[0] + obj.dim[0] and obj.pos[1] <= coord[1] <= obj.pos[1] + obj.dim[1]
+        poly = Polygon(obj.poly)
+        return poly.contains(Point(coord))

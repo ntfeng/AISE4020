@@ -5,6 +5,7 @@ import user
 from obstacle import Obst_Rect as Rect
 import sensor_sim
 from pathfinder import Pathfinder as pf
+import map_sim_gen as msgen
 
 # import map_processor
 
@@ -48,11 +49,21 @@ class Simulation:
         # Pathing
         self.curve_pts = []
 
+        # Map generator
+        map_generator = msgen.Sim_Map_Generator("maps/scan1_livingroom.png", 3.0)
+        polygon_list = map_generator.gen_map_polys()
+
         # Instantiate objects
-        self.obj_list = [Rect((0, -250), (200, 400)),
-                         Rect((-100, -200), (50, 500)),
-                         Rect((-150, 100), (50, 100)),
-                         Rect((-150, 250), (400, 30))]
+        # self.obj_list = [Rect((0, -250), (200, 400)),
+        #                  Rect((-100, -200), (50, 500)),
+        #                  Rect((-150, 100), (50, 100)),
+        #                  Rect((-150, 250), (400, 30))]
+        self.obj_list = []
+        for poly in polygon_list:
+
+            obs = Rect((0, 0), (0, 0)) 
+            obs.poly = poly 
+            self.obj_list.append(obs)
 
         self.user_obj = user.User((self.WIDTH // 2, self.HEIGHT // 2), self.USER_SPEED)
         self.lidar = sensor_sim.LiDAR_Sensor(self.user_obj, self.LiDAR_RANGE, self.LiDAR_FOV, 4500)
@@ -260,8 +271,14 @@ class Simulation:
             self.screen.fill((0, 0, 0)) # Clear Screen
 
             # Render obstacles
+            # for obj in self.obj_list:
+            #     obj.render(self.screen, self.cam.pos, True)
             for obj in self.obj_list:
-                obj.render(self.screen, self.cam.pos, True)
+                # Check if the obstacle has a polygon attribute
+                if hasattr(obj, 'poly'):
+
+                    pts = [(int(x) - self.cam.pos[0], int(y) - self.cam.pos[1]) for (x, y) in obj.poly]
+                    pygame.draw.polygon(self.screen, (0, 0, 255), pts, width=2)
 
             # Render lidar points
             for pt in lidar_pts:
