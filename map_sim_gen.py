@@ -38,6 +38,8 @@ class Sim_Map_Generator:
         111
         010'''
         struct_elem = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+        # struct_elem = np.ones((3,3))
+        # struct_elem = np.array([[1, 0, 1], [0, 1, 0], [1, 0, 1]], dtype=np.uint8)
         temp = preproc_map_cv2_img.copy()
 
         # Erosion and dilation

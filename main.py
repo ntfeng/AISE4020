@@ -52,7 +52,8 @@ class Simulation:
         self.curve_pts = []
 
         # Map generator
-        map_generator = msgen.Sim_Map_Generator("maps/scan1_livingroom.png", 3.0)
+        map_generator = msgen.Sim_Map_Generator("maps/scan1_livingroom.png", scale=1.0, merge_thresh=5, area_thresh=200, thickness=8, screen_width=1280, screen_height=720, close_kernel_size=(5, 5), close_iter=3, h_thresh=40, min_line_len=20, max_line_gap=15)
+        # map_generator = msgen.Sim_Map_Generator("maps/room1.jpg", scale=1.0, merge_thresh=5, area_thresh=200, thickness=0, screen_width=1280, screen_height=720, close_kernel_size=(5, 5), close_iter=1, h_thresh=40, min_line_len=20, max_line_gap=15)
         poly_list = map_generator.gen_map_polys()
 
         # Instantiate objects
